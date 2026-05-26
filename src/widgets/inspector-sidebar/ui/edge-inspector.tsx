@@ -72,13 +72,16 @@ export function EdgeInspector({ edge }: { edge: ProcessEdge }) {
 
           <div
             className={`rounded-md px-2 py-1.5 text-[11px] ${
-              Math.abs(sum - 1) > 1e-6
+              sum > 1 + 1e-6
                 ? "bg-red-500/10 text-red-600 dark:text-red-400"
-                : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                : sum < 1 - 1e-6
+                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                  : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
             }`}
           >
-            Сумма исходящих вероятностей узла-источника: {fmtPercent(sum)}
-            {Math.abs(sum - 1) > 1e-6 && " (должна быть 100%)"}
+            Σ исходящих вероятностей: {fmtPercent(sum)}
+            {sum > 1 + 1e-6 && " — превышает 100%"}
+            {sum < 1 - 1e-6 && ` — ${fmtPercent(1 - sum)} заявок теряется`}
           </div>
         </>
       )}

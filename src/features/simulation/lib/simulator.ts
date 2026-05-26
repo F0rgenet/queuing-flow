@@ -75,6 +75,8 @@ export class Simulator {
           processed: 0,
           dropped: 0,
         })
+      } else if (node.type === "sink") {
+        this.sinkReceived.set(node.id, 0)
       }
     }
 
@@ -166,7 +168,11 @@ export class Simulator {
     if (node.type === "sink") {
       this.completed += 1
       this.inSystem -= 1
-      if (tx) this.sojournSum += this.time - tx.createdAt
+      this.sinkReceived.set(node.id, (this.sinkReceived.get(node.id) ?? 0) + 1)
+      if (tx) {
+        this.sojournSum += this.time - tx.createdAt
+        this.transactionsInFlight.delete(tx.id)
+      }
       return
     }
 
@@ -185,6 +191,7 @@ export class Simulator {
         rt.dropped += 1
         this.dropped += 1
         this.inSystem -= 1
+        this.transactionsInFlight.delete(tx.id)
       }
     }
   }
@@ -225,27 +232,47 @@ export class Simulator {
     else rt.queue.push(tx) // FIFO и priority (упрощённо) — в хвост
   }
 
-  /** Маршрутизация заявки из узла по исходящим дугам с учётом max_loops. */
+  /**
+   * Маршрутизация заявки из узла (ТЗ §7.3, SIM-1..3).
+   * Учитывает:
+   *  - явную потерю: если сумма исходящих вероятностей < 1, остаток (1−Σ) —
+   *    вероятность выбытия заявки из системы (брак / уход);
+   *  - max_loops: дуги, исчерпавшие лимит проходов, исключаются, поток
+   *    перенормируется среди оставшихся;
+   *  - тупик: если доступных дуг нет вовсе — заявка теряется.
+   */
   private routeFrom(nodeId: string, tx: Transaction, traversed: string[]) {
-    const routes = resolveOutgoing(nodeId, this.model.edges).filter((r) => {
+    const all = resolveOutgoing(nodeId, this.model.edges)
+    const authoredSum = all.reduce((s, r) => s + r.probability, 0)
+    const lossProbability = Math.max(0, 1 - authoredSum)
+
+    // Явная потеря части потока (остаток до 1.0).
+    if (lossProbability > 0 && this.rng() < lossProbability) {
+      this.loseTransaction(tx)
+      return
+    }
+
+    // Дуги, ещё не исчерпавшие лимит петель.
+    const available = all.filter((r) => {
       const max = r.edge.parameters?.max_loops
       if (max === undefined || max === null) return true
       return (tx.loops[r.edge.id] ?? 0) < max
     })
 
-    if (routes.length === 0) {
-      // Тупик: некуда двигаться — заявка завершается в системе.
-      this.inSystem -= 1
-      this.transactionsInFlight.delete(tx.id)
+    if (available.length === 0) {
+      // Тупик (нет исходящих дуг или все исчерпали лимит) — заявка теряется.
+      this.loseTransaction(tx)
       return
     }
 
-    // Перенормировка вероятностей среди доступных дуг и розыгрыш.
-    const total = routes.reduce((s, r) => s + r.probability, 0) || routes.length
-    let roll = this.rng() * total
-    let chosen = routes[routes.length - 1]
-    for (const r of routes) {
-      const weight = r.probability > 0 ? r.probability : total / routes.length
+    // Розыгрыш среди доступных дуг пропорционально их вероятности.
+    // Если у всех доступных p = 0 (остался единственный выход) — выбираем равновероятно.
+    const availSum = available.reduce((s, r) => s + r.probability, 0)
+    const pickTotal = availSum > 0 ? availSum : available.length
+    let roll = this.rng() * pickTotal
+    let chosen = available[available.length - 1]
+    for (const r of available) {
+      const weight = availSum > 0 ? r.probability : 1
       if (roll < weight) {
         chosen = r
         break
@@ -265,7 +292,15 @@ export class Simulator {
     })
   }
 
+  /** Заявка покидает систему, не дойдя до стока (потеря). */
+  private loseTransaction(tx: Transaction) {
+    this.dropped += 1
+    this.inSystem -= 1
+    this.transactionsInFlight.delete(tx.id)
+  }
+
   private transactionsInFlight = new Map<number, Transaction>()
+  private sinkReceived = new Map<string, number>()
   private findTx(event: SimEvent): Transaction | undefined {
     return event.txId !== undefined ? this.transactionsInFlight.get(event.txId) : undefined
   }
@@ -324,6 +359,22 @@ export class Simulator {
       if (avgQueue > maxAvgQueue) {
         maxAvgQueue = avgQueue
         bottleneckId = node.id
+      }
+    }
+
+    // Стоки: число полученных заявок (ТЗ §7.5).
+    for (const node of this.model.nodes) {
+      if (node.type !== "sink") continue
+      byNode[node.id] = {
+        nodeId: node.id,
+        queueLength: 0,
+        busyChannels: 0,
+        channels: 0,
+        utilization: 0,
+        avgQueue: 0,
+        maxQueue: 0,
+        processed: this.sinkReceived.get(node.id) ?? 0,
+        dropped: 0,
       }
     }
 

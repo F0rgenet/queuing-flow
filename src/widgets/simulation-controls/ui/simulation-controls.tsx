@@ -16,7 +16,7 @@ export function SimulationControls() {
   const start = useSimulationStore((s) => s.start)
   const pause = useSimulationStore((s) => s.pause)
   const resume = useSimulationStore((s) => s.resume)
-  const stepOnce = useSimulationStore((s) => s.stepOnce)
+  const step = useSimulationStore((s) => s.step)
   const reset = useSimulationStore((s) => s.reset)
   const setSpeed = useSimulationStore((s) => s.setSpeed)
   const setOptions = useSimulationStore((s) => s.setOptions)
@@ -47,9 +47,9 @@ export function SimulationControls() {
         <Button
           size="sm"
           variant="ghost"
-          onClick={() => (phase === "idle" || phase === "finished" ? start(getModel()) : stepOnce())}
+          onClick={() => step(getModel())}
           disabled={hasErrors || running}
-          title="Один шаг (событие)"
+          title="Один шаг (одно событие модели)"
         >
           <SkipForward /> Шаг
         </Button>

@@ -65,18 +65,29 @@ export function validateModel(model: ProcessModel): ValidationReport {
     }
   }
 
-  // V-05: сумма исходящих вероятностей ≈ 1 (для узлов с несколькими condition-дугами)
+  // V-05: сумма исходящих вероятностей.
+  //  > 1 — ошибка (поток «перепродан»); < 1 — допустимо: остаток (1−Σ) трактуется
+  //  как вероятность потери заявки (брак / уход), о чём выводится предупреждение.
   for (const node of model.nodes) {
     const routes = resolveOutgoing(node.id, model.edges)
     if (routes.length === 0) continue
     const sum = routes.reduce((s, r) => s + r.probability, 0)
-    if (Math.abs(sum - 1) > PROB_EPS) {
+    if (sum > 1 + PROB_EPS) {
       issues.push({
         code: "V-05",
         level: "error",
         message: `Сумма исходящих вероятностей узла «${node.label}» = ${sum.toFixed(
           3
-        )} (должна быть 1.0)`,
+        )} (> 1.0 недопустимо)`,
+        targetId: node.id,
+      })
+    } else if (sum < 1 - PROB_EPS) {
+      issues.push({
+        code: "V-05",
+        level: "warning",
+        message: `Узел «${node.label}»: ${((1 - sum) * 100).toFixed(0)}% заявок теряется (Σ исходящих = ${(
+          sum * 100
+        ).toFixed(0)}%)`,
         targetId: node.id,
       })
     }

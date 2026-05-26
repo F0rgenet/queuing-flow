@@ -8,13 +8,15 @@ import {
   type SimSnapshot,
 } from "./types"
 
-const TICK_MS = 50
-const BASE_EVENTS_PER_TICK = 6
+const TICK_MS = 60
+const BASE_EVENTS_PER_TICK = 1
+/** Сколько мс дуга считается «активной» после прохода заявки (для анимации). */
+const ACTIVE_WINDOW_MS = 700
 
 interface SimState {
   phase: SimPhase
   snapshot: SimSnapshot | null
-  /** Дуги, по которым прошли заявки в последнем кадре — для анимации. */
+  /** Дуги, по которым недавно прошли заявки — для анимации частиц. */
   activeEdges: string[]
   speed: number // множитель скорости 0.1–10
   options: SimOptions
@@ -22,15 +24,16 @@ interface SimState {
   start: (model: ProcessModel) => void
   pause: () => void
   resume: () => void
-  stepOnce: () => void
+  step: (model: ProcessModel) => void
   reset: () => void
   setSpeed: (speed: number) => void
   setOptions: (patch: Partial<SimOptions>) => void
 }
 
-// Контроллер вне реактивного состояния: сам симулятор и таймер цикла.
+// Контроллер вне реактивного состояния: симулятор, таймер и журнал активности дуг.
 let simulator: Simulator | null = null
 let timer: ReturnType<typeof setInterval> | null = null
+let edgeLastSeen = new Map<string, number>()
 
 export const useSimulationStore = create<SimState>((set, get) => {
   const stopTimer = () => {
@@ -40,13 +43,16 @@ export const useSimulationStore = create<SimState>((set, get) => {
     }
   }
 
-  const publish = (traversed: string[]) => {
-    if (!simulator) return
-    set({
-      snapshot: simulator.snapshot(),
-      activeEdges: traversed,
-      phase: simulator.finished ? "finished" : get().phase,
-    })
+  /** Активные дуги = пройденные за окно ACTIVE_WINDOW_MS. */
+  const computeActiveEdges = (traversed: string[]): string[] => {
+    const now = Date.now()
+    for (const id of traversed) edgeLastSeen.set(id, now)
+    const active: string[] = []
+    for (const [id, ts] of edgeLastSeen) {
+      if (now - ts < ACTIVE_WINDOW_MS) active.push(id)
+      else edgeLastSeen.delete(id)
+    }
+    return active
   }
 
   const runTick = () => {
@@ -59,10 +65,13 @@ export const useSimulationStore = create<SimState>((set, get) => {
       traversed.push(...res.traversedEdges)
       finished = res.finished
     }
-    publish(traversed)
+    set({
+      snapshot: simulator.snapshot(),
+      activeEdges: computeActiveEdges(traversed),
+    })
     if (finished) {
       stopTimer()
-      set({ phase: "finished" })
+      set({ phase: "finished", activeEdges: [] })
     }
   }
 
@@ -75,6 +84,7 @@ export const useSimulationStore = create<SimState>((set, get) => {
 
     start: (model) => {
       stopTimer()
+      edgeLastSeen = new Map()
       simulator = new Simulator(model, get().options)
       set({ phase: "running", snapshot: simulator.snapshot(), activeEdges: [] })
       timer = setInterval(runTick, TICK_MS)
@@ -82,7 +92,7 @@ export const useSimulationStore = create<SimState>((set, get) => {
 
     pause: () => {
       stopTimer()
-      if (get().phase === "running") set({ phase: "paused" })
+      if (get().phase === "running") set({ phase: "paused", activeEdges: [] })
     },
 
     resume: () => {
@@ -91,12 +101,17 @@ export const useSimulationStore = create<SimState>((set, get) => {
       timer = setInterval(runTick, TICK_MS)
     },
 
-    stepOnce: () => {
-      if (!simulator) return
+    step: (model) => {
+      // Если прогон не начат — создаём симулятор «на паузе» и делаем один шаг.
+      if (!simulator || get().phase === "idle" || get().phase === "finished") {
+        stopTimer()
+        edgeLastSeen = new Map()
+        simulator = new Simulator(model, get().options)
+      }
       const res = simulator.step()
       set({
         snapshot: simulator.snapshot(),
-        activeEdges: res.traversedEdges,
+        activeEdges: computeActiveEdges(res.traversedEdges),
         phase: res.finished ? "finished" : "paused",
       })
     },
@@ -104,13 +119,11 @@ export const useSimulationStore = create<SimState>((set, get) => {
     reset: () => {
       stopTimer()
       simulator = null
+      edgeLastSeen = new Map()
       set({ phase: "idle", snapshot: null, activeEdges: [] })
     },
 
-    setSpeed: (speed) => {
-      set({ speed })
-      // Перезапуск таймера не требуется — runTick читает скорость динамически.
-    },
+    setSpeed: (speed) => set({ speed }),
 
     setOptions: (patch) => set((s) => ({ options: { ...s.options, ...patch } })),
   }

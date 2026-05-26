@@ -12,16 +12,22 @@ import {
   type NodeChange,
 } from "@xyflow/react"
 import { useProcessStore, type NodeType } from "@/entities/process-model"
-import { useSimulationStore } from "@/features/simulation"
 import { DND_NODE_MIME } from "@/shared/config/dnd"
+import { useTheme } from "@/shared/lib/theme"
 import { nodeTypes, edgeTypes } from "../lib/registry"
+
+const MINIMAP_COLORS: Record<string, string> = {
+  source: "#10b981",
+  operation: "#6b7280",
+  sink: "#0ea5e9",
+}
 
 function CanvasInner() {
   const nodes = useProcessStore((s) => s.nodes)
   const edges = useProcessStore((s) => s.edges)
   const selectedNodeId = useProcessStore((s) => s.selectedNodeId)
   const selectedEdgeId = useProcessStore((s) => s.selectedEdgeId)
-  const activeEdges = useSimulationStore((s) => s.activeEdges)
+  const { theme } = useTheme()
 
   const updateNodePosition = useProcessStore((s) => s.updateNodePosition)
   const removeNode = useProcessStore((s) => s.removeNode)
@@ -45,7 +51,7 @@ function CanvasInner() {
     [nodes, selectedNodeId]
   )
 
-  const activeSet = useMemo(() => new Set(activeEdges), [activeEdges])
+  // Анимацию активных дуг рисует сам ProcessEdge (подписан на стор симуляции).
   const rfEdges = useMemo(
     () =>
       edges.map((e) => ({
@@ -54,10 +60,9 @@ function CanvasInner() {
         target: e.target,
         type: "process",
         data: { processEdge: e },
-        animated: activeSet.has(e.id),
         selected: e.id === selectedEdgeId,
       })),
-    [edges, activeSet, selectedEdgeId]
+    [edges, selectedEdgeId]
   )
 
   const onNodesChange = useCallback(
@@ -116,13 +121,19 @@ function CanvasInner() {
       }}
       deleteKeyCode={["Delete", "Backspace"]}
       defaultEdgeOptions={{ markerEnd: { type: MarkerType.ArrowClosed } }}
+      colorMode={theme}
       fitView
       proOptions={{ hideAttribution: true }}
       className="bg-muted/30"
     >
-      <Background gap={16} className="!bg-background" />
+      <Background gap={16} />
       <Controls className="!shadow-md" />
-      <MiniMap pannable zoomable className="!bg-card" />
+      <MiniMap
+        pannable
+        zoomable
+        nodeColor={(n) => MINIMAP_COLORS[n.type ?? "operation"] ?? "#6b7280"}
+        nodeStrokeWidth={3}
+      />
     </ReactFlow>
   )
 }

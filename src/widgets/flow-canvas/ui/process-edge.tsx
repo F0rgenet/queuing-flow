@@ -5,6 +5,7 @@ import {
   type EdgeProps,
 } from "@xyflow/react"
 import { useProcessStore, type FlowEdge } from "@/entities/process-model"
+import { useSimulationStore } from "@/features/simulation"
 import { cn } from "@/shared/lib/cn"
 import { fmtPercent } from "@/shared/lib/format"
 
@@ -29,6 +30,7 @@ export function ProcessEdge({
   })
 
   const selectEdge = useProcessStore((s) => s.selectEdge)
+  const active = useSimulationStore((s) => s.activeEdges.includes(id))
   const edge = data?.processEdge
   const isCondition = edge?.type === "condition"
   const prob = edge?.parameters?.probability
@@ -49,6 +51,19 @@ export function ProcessEdge({
           strokeDasharray: isCondition ? "5 4" : undefined,
         }}
       />
+
+      {/* Анимация движения заявок — кружочки, перемещающиеся по связи (ТЗ SIM-5). */}
+      {active && (
+        <>
+          <circle r={4} fill="var(--primary)">
+            <animateMotion dur="0.9s" repeatCount="indefinite" path={path} />
+          </circle>
+          <circle r={4} fill="var(--primary)" opacity={0.6}>
+            <animateMotion dur="0.9s" begin="0.45s" repeatCount="indefinite" path={path} />
+          </circle>
+        </>
+      )}
+
       {isCondition && (
         <EdgeLabelRenderer>
           <div

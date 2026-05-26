@@ -1,5 +1,6 @@
 import { useAnalyticsSync } from "@/features/analytics"
 import { usePersistence } from "@/features/persistence"
+import { useHotkeys } from "@/features/hotkeys"
 import { Toolbar } from "@/widgets/toolbar"
 import { NodePalette } from "@/widgets/node-palette"
 import { FlowCanvas } from "@/widgets/flow-canvas"
@@ -12,6 +13,7 @@ export function EditorPage() {
   // Фоновые процессы приложения: аналитика онлайн + автосохранение/восстановление.
   useAnalyticsSync()
   usePersistence()
+  useHotkeys()
 
   return (
     <div className="flex h-svh flex-col overflow-hidden bg-background text-foreground">

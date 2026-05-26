@@ -96,6 +96,7 @@ export function OperationNode({ id, data }: NodeProps<FlowNode>) {
 export function SourceNode({ id, data }: NodeProps<FlowNode>) {
   const node = data.processNode
   const rate = isSource(node) ? node.parameters.input_rate : 0
+  const limit = isSource(node) ? node.parameters.limit : null
   return (
     <Selected id={id}>
       <div className="group relative w-40 rounded-xl border border-emerald-500/40 bg-card p-3 shadow-sm">
@@ -107,7 +108,18 @@ export function SourceNode({ id, data }: NodeProps<FlowNode>) {
         <div className="mt-1 text-[11px] text-muted-foreground">
           Источник · γ = {fmt(rate)}
         </div>
-        <Tooltip rows={[["Тип", "Источник заявок"], ["γ (интенсивность)", fmt(rate)]]} />
+        {limit != null && (
+          <div className="mt-0.5 text-[11px] text-muted-foreground">
+            лимит заявок: {limit}
+          </div>
+        )}
+        <Tooltip
+          rows={[
+            ["Тип", "Источник заявок"],
+            ["γ (интенсивность)", fmt(rate)],
+            ...(limit != null ? ([["Лимит заявок", String(limit)]] as [string, string][]) : []),
+          ]}
+        />
       </div>
     </Selected>
   )
@@ -116,6 +128,7 @@ export function SourceNode({ id, data }: NodeProps<FlowNode>) {
 export function SinkNode({ id, data }: NodeProps<FlowNode>) {
   const node = data.processNode
   const metrics = useNodeMetrics(id)
+  const isSim = metrics?.source === "simulation"
   return (
     <Selected id={id}>
       <div className="group relative w-40 rounded-xl border border-sky-500/40 bg-card p-3 shadow-sm">
@@ -125,12 +138,16 @@ export function SinkNode({ id, data }: NodeProps<FlowNode>) {
           <span className="truncate text-sm font-semibold">{node.label}</span>
         </div>
         <div className="mt-1 text-[11px] text-muted-foreground">
-          Сток · поток = {fmt(metrics?.throughput ?? 0)}
+          {isSim
+            ? `Сток · получено: ${metrics?.throughput ?? 0}`
+            : `Сток · поток = ${fmt(metrics?.throughput ?? 0)}`}
         </div>
         <Tooltip
           rows={[
             ["Тип", "Сток (выход)"],
-            ["Входящий поток", fmt(metrics?.throughput ?? 0)],
+            isSim
+              ? ["Получено заявок", String(metrics?.throughput ?? 0)]
+              : ["Входящий поток λ", fmt(metrics?.throughput ?? 0)],
           ]}
         />
       </div>
