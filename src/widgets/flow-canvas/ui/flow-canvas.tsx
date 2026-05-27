@@ -3,7 +3,6 @@ import {
   Background,
   Controls,
   MarkerType,
-  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
@@ -15,12 +14,6 @@ import { useProcessStore, type NodeType } from "@/entities/process-model"
 import { DND_NODE_MIME } from "@/shared/config/dnd"
 import { useTheme } from "@/shared/lib/theme"
 import { nodeTypes, edgeTypes } from "../lib/registry"
-
-const MINIMAP_COLORS: Record<string, string> = {
-  source: "#10b981",
-  operation: "#6b7280",
-  sink: "#0ea5e9",
-}
 
 function CanvasInner() {
   const nodes = useProcessStore((s) => s.nodes)
@@ -128,12 +121,6 @@ function CanvasInner() {
     >
       <Background gap={16} />
       <Controls className="!shadow-md" />
-      <MiniMap
-        pannable
-        zoomable
-        nodeColor={(n) => MINIMAP_COLORS[n.type ?? "operation"] ?? "#6b7280"}
-        nodeStrokeWidth={3}
-      />
     </ReactFlow>
   )
 }
