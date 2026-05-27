@@ -8,10 +8,20 @@ import {
   type SimSnapshot,
 } from "./types"
 
-const TICK_MS = 60
-const BASE_EVENTS_PER_TICK = 1
+/** Интервал таймера при скорости ≥ 1×. */
+const BASE_TICK_MS = 60
 /** Сколько мс дуга считается «активной» после прохода заявки (для анимации). */
 const ACTIVE_WINDOW_MS = 700
+
+/**
+ * Раскладываем множитель скорости на параметры прогона:
+ *  - быстрее 1× — больше событий за тик при базовом интервале;
+ *  - медленнее 1× — одно событие, но растянутый интервал (реальное замедление).
+ */
+function pacing(speed: number): { intervalMs: number; events: number } {
+  if (speed >= 1) return { intervalMs: BASE_TICK_MS, events: Math.max(1, Math.round(speed)) }
+  return { intervalMs: Math.round(BASE_TICK_MS / speed), events: 1 }
+}
 
 interface SimState {
   phase: SimPhase
@@ -43,6 +53,12 @@ export const useSimulationStore = create<SimState>((set, get) => {
     }
   }
 
+  /** (Пере)запускает таймер с интервалом, соответствующим текущей скорости. */
+  const startTimer = () => {
+    stopTimer()
+    timer = setInterval(runTick, pacing(get().speed).intervalMs)
+  }
+
   /** Активные дуги = пройденные за окно ACTIVE_WINDOW_MS. */
   const computeActiveEdges = (traversed: string[]): string[] => {
     const now = Date.now()
@@ -57,7 +73,7 @@ export const useSimulationStore = create<SimState>((set, get) => {
 
   const runTick = () => {
     if (!simulator) return
-    const count = Math.max(1, Math.round(BASE_EVENTS_PER_TICK * get().speed))
+    const count = pacing(get().speed).events
     const traversed: string[] = []
     let finished = false
     for (let i = 0; i < count && !finished; i++) {
@@ -87,7 +103,7 @@ export const useSimulationStore = create<SimState>((set, get) => {
       edgeLastSeen = new Map()
       simulator = new Simulator(model, get().options)
       set({ phase: "running", snapshot: simulator.snapshot(), activeEdges: [] })
-      timer = setInterval(runTick, TICK_MS)
+      startTimer()
     },
 
     pause: () => {
@@ -98,7 +114,7 @@ export const useSimulationStore = create<SimState>((set, get) => {
     resume: () => {
       if (!simulator || get().phase !== "paused") return
       set({ phase: "running" })
-      timer = setInterval(runTick, TICK_MS)
+      startTimer()
     },
 
     step: (model) => {
@@ -123,7 +139,11 @@ export const useSimulationStore = create<SimState>((set, get) => {
       set({ phase: "idle", snapshot: null, activeEdges: [] })
     },
 
-    setSpeed: (speed) => set({ speed }),
+    setSpeed: (speed) => {
+      set({ speed })
+      // На ходу перезапускаем таймер, чтобы применился новый интервал.
+      if (get().phase === "running") startTimer()
+    },
 
     setOptions: (patch) => set((s) => ({ options: { ...s.options, ...patch } })),
   }

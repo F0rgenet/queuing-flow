@@ -1,0 +1,17 @@
+%% Слои Feature-Sliced Design. Импорты направлены строго вниз.
+flowchart TD
+    APP["app — композиция, провайдеры"]
+    PAGES["pages — editor"]
+    WIDGETS["widgets — toolbar, node-palette, flow-canvas,<br/>json-editor, inspector-sidebar, simulation-controls, stats-panel"]
+    FEATURES["features — analytics, simulation, json-sync,<br/>persistence, hotkeys"]
+    ENTITIES["entities — process-model (типы, стор, валидатор, сериализатор)"]
+    SHARED["shared — config, lib (math, theme), ui"]
+
+    APP --> PAGES
+    PAGES --> WIDGETS
+    WIDGETS --> FEATURES
+    FEATURES --> ENTITIES
+    ENTITIES --> SHARED
+    WIDGETS -.-> ENTITIES
+    WIDGETS -.-> SHARED
+    FEATURES -.-> SHARED

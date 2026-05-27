@@ -4,9 +4,12 @@ import { useSimulationStore } from "@/features/simulation"
 import { fmt } from "@/shared/lib/format"
 import { Button, NumberInput } from "@/shared/ui"
 
-/** Логарифмическое отображение ползунка [0..1] → скорость [0.1x..10x]. */
-const sliderToSpeed = (v: number) => Math.round(10 ** (2 * v - 1) * 10) / 10
-const speedToSlider = (s: number) => (Math.log10(s) + 1) / 2
+/** Логарифмическое отображение ползунка [0..1] → скорость [0.1x..50x]. */
+const sliderToSpeed = (v: number) => {
+  const s = 10 ** (2.7 * v - 1)
+  return s >= 10 ? Math.round(s) : Math.round(s * 10) / 10
+}
+const speedToSlider = (s: number) => (Math.log10(s) + 1) / 2.7
 
 export function SimulationControls() {
   const phase = useSimulationStore((s) => s.phase)
