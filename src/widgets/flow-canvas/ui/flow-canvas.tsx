@@ -13,6 +13,7 @@ import {
   type NodeChange,
 } from "@xyflow/react"
 import { useProcessStore, type NodeType } from "@/entities/process-model"
+import { ChartConnectorsLayer } from "@/widgets/chart-windows"
 import { DND_NODE_MIME } from "@/shared/config/dnd"
 import { useTheme } from "@/shared/lib/theme"
 import { nodeTypes, edgeTypes } from "../lib/registry"
@@ -62,11 +63,13 @@ function CanvasInner() {
     [nodes, charts, selectedNodeId]
   )
 
-  // Дуги = связи процесса + соединительные линии «окно ↔ блок» (тип
-  // `chart-connector`). Цвет линии берётся из colorIndex окна.
+  // Дуги — только связи процесса. Соединительные линии «окно ↔ блок» рисует
+  // отдельный слой ChartConnectorsLayer внутри ViewportPortal: edge-система
+  // React Flow требует совпадающих handle-типов на обоих концах, что не
+  // подходит для произвольной пары «чарт ↔ источник/сток/операция».
   const rfEdges = useMemo<Edge[]>(
-    () => [
-      ...edges.map((e) => ({
+    () =>
+      edges.map((e) => ({
         id: e.id,
         source: e.source,
         target: e.target,
@@ -74,18 +77,7 @@ function CanvasInner() {
         data: { processEdge: e },
         selected: e.id === selectedEdgeId,
       })),
-      ...charts.map((c) => ({
-        id: `chart-edge-${c.id}`,
-        source: c.id,
-        target: c.nodeId,
-        type: "chart-connector",
-        data: { colorIndex: c.colorIndex },
-        selectable: false,
-        deletable: false,
-        focusable: false,
-      })),
-    ],
-    [edges, charts, selectedEdgeId]
+    [edges, selectedEdgeId]
   )
 
   const chartIdSet = useMemo(() => new Set(charts.map((c) => c.id)), [charts])
@@ -108,11 +100,7 @@ function CanvasInner() {
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
       for (const ch of changes) {
-        // Соединительные линии графиков не удаляются вручную — только через
-        // закрытие самого окна.
-        if (ch.type === "remove" && !ch.id.startsWith("chart-edge-")) {
-          removeEdge(ch.id)
-        }
+        if (ch.type === "remove") removeEdge(ch.id)
       }
     },
     [removeEdge]
@@ -149,10 +137,7 @@ function CanvasInner() {
         if (chartIdSet.has(node.id)) return
         selectNode(node.id)
       }}
-      onEdgeClick={(_, edge) => {
-        if (edge.id.startsWith("chart-edge-")) return
-        selectEdge(edge.id)
-      }}
+      onEdgeClick={(_, edge) => selectEdge(edge.id)}
       onPaneClick={() => selectNode(null)}
       onDrop={onDrop}
       onDragOver={(e) => {
@@ -168,6 +153,7 @@ function CanvasInner() {
     >
       <Background gap={16} />
       <Controls className="!shadow-md" />
+      <ChartConnectorsLayer />
     </ReactFlow>
   )
 }

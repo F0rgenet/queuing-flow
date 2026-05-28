@@ -1,5 +1,6 @@
 import { MODEL_VERSION } from "../model/defaults"
 import type {
+  ChartMetric,
   ChartWindow,
   EdgeType,
   NodeType,
@@ -7,6 +8,8 @@ import type {
   ProcessModel,
   ProcessNode,
 } from "../model/types"
+
+const CHART_METRICS: ChartMetric[] = ["cumulative", "rate", "queue", "utilization"]
 
 export type ParseResult =
   | { ok: true; model: ProcessModel }
@@ -41,6 +44,7 @@ export function serialize(model: ProcessModel): string {
             nodeId: c.nodeId,
             position: { x: Math.round(c.position.x), y: Math.round(c.position.y) },
             colorIndex: c.colorIndex,
+            metric: c.metric,
           })),
         }
       : {}),
@@ -148,10 +152,14 @@ function parseChart(item: unknown, i: number): ChartWindow | string {
   const pos = c.position as Record<string, unknown> | undefined
   if (!pos || typeof pos.x !== "number" || typeof pos.y !== "number")
     return `charts[${i}] (${c.id}): position {x,y} обязателен`
+  const metric = CHART_METRICS.includes(c.metric as ChartMetric)
+    ? (c.metric as ChartMetric)
+    : "cumulative"
   return {
     id: c.id,
     nodeId: c.nodeId,
     position: { x: pos.x, y: pos.y },
     colorIndex: typeof c.colorIndex === "number" ? c.colorIndex : 0,
+    metric,
   }
 }

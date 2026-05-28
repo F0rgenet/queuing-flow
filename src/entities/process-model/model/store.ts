@@ -3,6 +3,7 @@ import { makeId } from "@/shared/lib/id"
 import { validateModel, type ValidationReport } from "../lib/validator"
 import { defaultParams, emptyModel, NODE_LABELS, SAMPLE_MODEL } from "./defaults"
 import type {
+  ChartMetric,
   ChartWindow,
   NodeParameters,
   NodeType,
@@ -52,6 +53,8 @@ interface ProcessState {
   closeChart: (id: string) => void
   moveChart: (id: string, position: Position) => void
   toggleChart: (nodeId: string, fallbackPosition: Position) => void
+  setChartMetric: (id: string, metric: ChartMetric) => void
+  setChartColor: (id: string, colorIndex: number) => void
 
   // --- выделение ---
   selectNode: (id: string | null) => void
@@ -194,7 +197,9 @@ export const useProcessStore = create<ProcessState>((set, get) => {
     openChart: (nodeId, position) => {
       const id = makeId("chart")
       const colorIndex = nextColorIndex(get().charts)
-      set((s) => ({ charts: [...s.charts, { id, nodeId, position, colorIndex }] }))
+      set((s) => ({
+        charts: [...s.charts, { id, nodeId, position, colorIndex, metric: "cumulative" }],
+      }))
       return id
     },
 
@@ -212,10 +217,23 @@ export const useProcessStore = create<ProcessState>((set, get) => {
         const id = makeId("chart")
         const colorIndex = nextColorIndex(get().charts)
         set((s) => ({
-          charts: [...s.charts, { id, nodeId, position: fallbackPosition, colorIndex }],
+          charts: [
+            ...s.charts,
+            { id, nodeId, position: fallbackPosition, colorIndex, metric: "cumulative" },
+          ],
         }))
       }
     },
+
+    setChartMetric: (id, metric) =>
+      set((s) => ({
+        charts: s.charts.map((c) => (c.id === id ? { ...c, metric } : c)),
+      })),
+
+    setChartColor: (id, colorIndex) =>
+      set((s) => ({
+        charts: s.charts.map((c) => (c.id === id ? { ...c, colorIndex } : c)),
+      })),
 
     selectNode: (id) => set({ selectedNodeId: id, selectedEdgeId: null }),
     selectEdge: (id) => set({ selectedEdgeId: id, selectedNodeId: null }),

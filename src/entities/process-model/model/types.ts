@@ -66,6 +66,22 @@ export interface ProcessMeta {
 }
 
 /**
+ * Какую величину рисует график.
+ *  - cumulative — накопленный счётчик заявок (источник: создано, операция:
+ *    обработано, сток: получено)
+ *  - rate       — мгновенный темп (производная cumulative по времени)
+ *  - queue      — длина очереди (только операция)
+ *  - utilization — загрузка каналов ρ (только операция)
+ */
+export type ChartMetric = "cumulative" | "rate" | "queue" | "utilization"
+
+/** Какие метрики допустимы для данного типа узла (для UI-выбора). */
+export function metricsForNode(type: NodeType): ChartMetric[] {
+  if (type === "operation") return ["cumulative", "rate", "queue", "utilization"]
+  return ["cumulative", "rate"]
+}
+
+/**
  * Открытое окно графика для конкретного узла. Это — отдельный узел React Flow
  * (тип `chart`), который пользователь таскает наравне с блоками процесса.
  * Поэтому position здесь — flow-координаты, как и у обычных узлов.
@@ -77,6 +93,7 @@ export interface ChartWindow {
   nodeId: string
   position: Position
   colorIndex: number
+  metric: ChartMetric
 }
 
 export interface ProcessModel {

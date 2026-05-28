@@ -1,12 +1,13 @@
 import { useMemo } from "react"
+import type { ChartMetric } from "@/entities/process-model"
 import type { ChartSample } from "@/features/charts"
-import { fmt } from "@/shared/lib/format"
+import { fmt, fmtPercent } from "@/shared/lib/format"
 
 interface Props {
   data: ChartSample[]
   width: number
   height: number
-  unit?: string
+  metric: ChartMetric
   /** Цвет линии/заливки. По умолчанию — primary темы. */
   color?: string
 }
@@ -15,17 +16,20 @@ const PAD_LEFT = 38
 const PAD_RIGHT = 8
 const PAD_TOP = 8
 const PAD_BOTTOM = 22
+/** Окно сглаживания для производной (точек) при метрике `rate`. */
+const RATE_WINDOW = 5
 
-/** Простой SVG-график кумулятивной величины во времени. */
-export function LineChart({ data, width, height, unit, color = "var(--primary)" }: Props) {
+/** Простой SVG-график выбранной метрики во времени. */
+export function LineChart({ data, width, height, metric, color = "var(--primary)" }: Props) {
   const layout = useMemo(() => {
-    if (data.length === 0) return null
+    if (data.length < 1) return null
     const xs = data.map((d) => d.t)
-    const ys = data.map((d) => d.value)
+    const ys = computeMetricSeries(data, metric)
+
     const xMin = xs[0]
     const xMax = xs[xs.length - 1]
     const yMin = 0
-    const yMax = Math.max(1, ...ys)
+    const yMax = niceMax(ys, metric)
     const xRange = xMax - xMin || 1
     const yRange = yMax - yMin || 1
 
@@ -35,16 +39,16 @@ export function LineChart({ data, width, height, unit, color = "var(--primary)" 
     const sx = (t: number) => PAD_LEFT + ((t - xMin) / xRange) * innerW
     const sy = (v: number) => PAD_TOP + innerH - ((v - yMin) / yRange) * innerH
 
-    const path = data.map((d, i) => `${i === 0 ? "M" : "L"} ${sx(d.t)} ${sy(d.value)}`).join(" ")
+    const path = data
+      .map((d, i) => `${i === 0 ? "M" : "L"} ${sx(d.t)} ${sy(ys[i])}`)
+      .join(" ")
     const area = `${path} L ${sx(xMax)} ${PAD_TOP + innerH} L ${sx(xMin)} ${PAD_TOP + innerH} Z`
 
-    // Тики оси Y (0, mid, max).
     const yTicks = [0, yMax / 2, yMax]
-    // Тики оси X (start, mid, end).
     const xTicks = [xMin, (xMin + xMax) / 2, xMax]
 
-    return { sx, sy, path, area, xMin, xMax, yMax, innerW, innerH, yTicks, xTicks }
-  }, [data, width, height])
+    return { sx, sy, path, area, ys, xMin, xMax, yMax, innerW, innerH, yTicks, xTicks }
+  }, [data, width, height, metric])
 
   if (!layout || data.length === 0) {
     return (
@@ -54,15 +58,10 @@ export function LineChart({ data, width, height, unit, color = "var(--primary)" 
     )
   }
 
-  const lastValue = data[data.length - 1].value
+  const lastValue = layout.ys[layout.ys.length - 1]
 
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="none"
-      className="block size-full"
-    >
-      {/* Горизонтальные линии сетки и тики оси Y */}
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block size-full">
       {layout.yTicks.map((v, i) => {
         const y = layout.sy(v)
         return (
@@ -83,13 +82,12 @@ export function LineChart({ data, width, height, unit, color = "var(--primary)" 
               className="fill-muted-foreground"
               style={{ fontSize: 9 }}
             >
-              {fmt(v, 0)}
+              {formatTick(v, metric)}
             </text>
           </g>
         )
       })}
 
-      {/* Тики оси X */}
       {layout.xTicks.map((v, i) => {
         const x = layout.sx(v)
         return (
@@ -106,16 +104,15 @@ export function LineChart({ data, width, height, unit, color = "var(--primary)" 
         )
       })}
 
-      {/* Полупрозрачная заливка под линией */}
       <path d={layout.area} fill={color} fillOpacity={0.12} />
-
-      {/* Линия */}
       <path d={layout.path} fill="none" stroke={color} strokeWidth={1.5} />
+      <circle
+        cx={layout.sx(data[data.length - 1].t)}
+        cy={layout.sy(lastValue)}
+        r={2.5}
+        fill={color}
+      />
 
-      {/* Подсветка последней точки */}
-      <circle cx={layout.sx(data[data.length - 1].t)} cy={layout.sy(lastValue)} r={2.5} fill={color} />
-
-      {/* Текущее значение в углу */}
       <text
         x={width - PAD_RIGHT - 2}
         y={PAD_TOP + 9}
@@ -123,9 +120,54 @@ export function LineChart({ data, width, height, unit, color = "var(--primary)" 
         className="fill-foreground font-semibold"
         style={{ fontSize: 10 }}
       >
-        {fmt(lastValue, 0)}
-        {unit ? ` ${unit}` : ""}
+        {formatValue(lastValue, metric)}
       </text>
     </svg>
   )
+}
+
+function computeMetricSeries(data: ChartSample[], metric: ChartMetric): number[] {
+  switch (metric) {
+    case "cumulative":
+      return data.map((d) => d.cumulative)
+    case "queue":
+      return data.map((d) => d.queue)
+    case "utilization":
+      return data.map((d) => d.utilization)
+    case "rate": {
+      // Темп — наклон cumulative на окне RATE_WINDOW точек: устойчивее,
+      // чем разница соседних точек, особенно при большой плотности событий.
+      const result = new Array<number>(data.length)
+      for (let i = 0; i < data.length; i++) {
+        const j = Math.max(0, i - RATE_WINDOW)
+        const dt = data[i].t - data[j].t
+        result[i] = dt > 0 ? (data[i].cumulative - data[j].cumulative) / dt : 0
+      }
+      return result
+    }
+  }
+}
+
+function niceMax(ys: number[], metric: ChartMetric): number {
+  const max = ys.reduce((m, v) => (v > m ? v : m), 0)
+  if (metric === "utilization") return Math.max(1, max) // ρ всегда ≤ 1+; показываем шкалу до 100%
+  return Math.max(1, max)
+}
+
+function formatTick(v: number, metric: ChartMetric): string {
+  if (metric === "utilization") return `${Math.round(v * 100)}%`
+  return fmt(v, 0)
+}
+
+function formatValue(v: number, metric: ChartMetric): string {
+  switch (metric) {
+    case "cumulative":
+      return `${fmt(v, 0)} шт.`
+    case "queue":
+      return `${fmt(v, 0)}`
+    case "utilization":
+      return fmtPercent(v)
+    case "rate":
+      return `${fmt(v, 2)}/t`
+  }
 }
