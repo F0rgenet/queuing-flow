@@ -65,11 +65,26 @@ export interface ProcessMeta {
   timeUnit: TimeUnit
 }
 
+/**
+ * Открытое окно графика для конкретного узла. Это — отдельный узел React Flow
+ * (тип `chart`), который пользователь таскает наравне с блоками процесса.
+ * Поэтому position здесь — flow-координаты, как и у обычных узлов.
+ * colorIndex — индекс в палитре, фиксируется при открытии (стабильный цвет
+ * самого окна и соединительной линии).
+ */
+export interface ChartWindow {
+  id: string
+  nodeId: string
+  position: Position
+  colorIndex: number
+}
+
 export interface ProcessModel {
   version: string
   meta: ProcessMeta
   nodes: ProcessNode[]
   edges: ProcessEdge[]
+  charts?: ChartWindow[]
 }
 
 /** Узкие типы-предикаты — удобны при работе с параметрами по типу узла. */

@@ -17,7 +17,12 @@ export function useJsonSync() {
   // Граф → текст (только когда редактор не редактируется пользователем).
   useEffect(() => {
     const unsub = useProcessStore.subscribe((state, prev) => {
-      if (state.nodes === prev.nodes && state.edges === prev.edges && state.meta === prev.meta)
+      if (
+        state.nodes === prev.nodes &&
+        state.edges === prev.edges &&
+        state.meta === prev.meta &&
+        state.charts === prev.charts
+      )
         return
       if (editingRef.current) return
       setText(serialize(state.getModel()))

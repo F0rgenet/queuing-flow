@@ -7,7 +7,9 @@ import {
   ReactFlowProvider,
   useReactFlow,
   type Connection,
+  type Edge,
   type EdgeChange,
+  type Node,
   type NodeChange,
 } from "@xyflow/react"
 import { useProcessStore, type NodeType } from "@/entities/process-model"
@@ -18,6 +20,7 @@ import { nodeTypes, edgeTypes } from "../lib/registry"
 function CanvasInner() {
   const nodes = useProcessStore((s) => s.nodes)
   const edges = useProcessStore((s) => s.edges)
+  const charts = useProcessStore((s) => s.charts)
   const selectedNodeId = useProcessStore((s) => s.selectedNodeId)
   const selectedEdgeId = useProcessStore((s) => s.selectedEdgeId)
   const { theme } = useTheme()
@@ -29,25 +32,41 @@ function CanvasInner() {
   const addNode = useProcessStore((s) => s.addNode)
   const selectNode = useProcessStore((s) => s.selectNode)
   const selectEdge = useProcessStore((s) => s.selectEdge)
+  const moveChart = useProcessStore((s) => s.moveChart)
+  const closeChart = useProcessStore((s) => s.closeChart)
 
   const { screenToFlowPosition } = useReactFlow()
 
-  const rfNodes = useMemo(
-    () =>
-      nodes.map((n) => ({
+  // Узлы графа = узлы процесса + окна графиков (тип `chart`). Окна — равноправные
+  // узлы ReactFlow, поэтому пан/зум/перетаскивание работают штатно.
+  const rfNodes = useMemo<Node[]>(
+    () => [
+      ...nodes.map((n) => ({
         id: n.id,
         type: n.type,
         position: n.position,
         data: { processNode: n },
         selected: n.id === selectedNodeId,
       })),
-    [nodes, selectedNodeId]
+      ...charts.map((c) => ({
+        id: c.id,
+        type: "chart" as const,
+        position: c.position,
+        data: { chart: c },
+        // окна не участвуют в выделении и не показывают рамку «selected».
+        selectable: false,
+        // соединять окно ни с чем нельзя.
+        connectable: false,
+      })),
+    ],
+    [nodes, charts, selectedNodeId]
   )
 
-  // Анимацию активных дуг рисует сам ProcessEdge (подписан на стор симуляции).
-  const rfEdges = useMemo(
-    () =>
-      edges.map((e) => ({
+  // Дуги = связи процесса + соединительные линии «окно ↔ блок» (тип
+  // `chart-connector`). Цвет линии берётся из colorIndex окна.
+  const rfEdges = useMemo<Edge[]>(
+    () => [
+      ...edges.map((e) => ({
         id: e.id,
         source: e.source,
         target: e.target,
@@ -55,23 +74,45 @@ function CanvasInner() {
         data: { processEdge: e },
         selected: e.id === selectedEdgeId,
       })),
-    [edges, selectedEdgeId]
+      ...charts.map((c) => ({
+        id: `chart-edge-${c.id}`,
+        source: c.id,
+        target: c.nodeId,
+        type: "chart-connector",
+        data: { colorIndex: c.colorIndex },
+        selectable: false,
+        deletable: false,
+        focusable: false,
+      })),
+    ],
+    [edges, charts, selectedEdgeId]
   )
+
+  const chartIdSet = useMemo(() => new Set(charts.map((c) => c.id)), [charts])
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
       for (const ch of changes) {
-        if (ch.type === "position" && ch.position) updateNodePosition(ch.id, ch.position)
-        else if (ch.type === "remove") removeNode(ch.id)
+        if (ch.type === "position" && ch.position) {
+          if (chartIdSet.has(ch.id)) moveChart(ch.id, ch.position)
+          else updateNodePosition(ch.id, ch.position)
+        } else if (ch.type === "remove") {
+          if (chartIdSet.has(ch.id)) closeChart(ch.id)
+          else removeNode(ch.id)
+        }
       }
     },
-    [updateNodePosition, removeNode]
+    [updateNodePosition, removeNode, moveChart, closeChart, chartIdSet]
   )
 
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
       for (const ch of changes) {
-        if (ch.type === "remove") removeEdge(ch.id)
+        // Соединительные линии графиков не удаляются вручную — только через
+        // закрытие самого окна.
+        if (ch.type === "remove" && !ch.id.startsWith("chart-edge-")) {
+          removeEdge(ch.id)
+        }
       }
     },
     [removeEdge]
@@ -104,8 +145,14 @@ function CanvasInner() {
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
-      onNodeClick={(_, node) => selectNode(node.id)}
-      onEdgeClick={(_, edge) => selectEdge(edge.id)}
+      onNodeClick={(_, node) => {
+        if (chartIdSet.has(node.id)) return
+        selectNode(node.id)
+      }}
+      onEdgeClick={(_, edge) => {
+        if (edge.id.startsWith("chart-edge-")) return
+        selectEdge(edge.id)
+      }}
       onPaneClick={() => selectNode(null)}
       onDrop={onDrop}
       onDragOver={(e) => {

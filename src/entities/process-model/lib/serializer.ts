@@ -1,5 +1,6 @@
 import { MODEL_VERSION } from "../model/defaults"
 import type {
+  ChartWindow,
   EdgeType,
   NodeType,
   ProcessEdge,
@@ -33,6 +34,16 @@ export function serialize(model: ProcessModel): string {
       type: e.type,
       ...(e.parameters ? { parameters: e.parameters } : {}),
     })),
+    ...(model.charts && model.charts.length > 0
+      ? {
+          charts: model.charts.map((c) => ({
+            id: c.id,
+            nodeId: c.nodeId,
+            position: { x: Math.round(c.position.x), y: Math.round(c.position.y) },
+            colorIndex: c.colorIndex,
+          })),
+        }
+      : {}),
   }
   return JSON.stringify(ordered, null, 2)
 }
@@ -74,6 +85,15 @@ export function parse(text: string): ParseResult {
     timeUnit: "min",
   }
 
+  const charts: ChartWindow[] = []
+  if (Array.isArray(obj.charts)) {
+    for (const [i, item] of obj.charts.entries()) {
+      const c = parseChart(item, i)
+      if (typeof c === "string") return { ok: false, error: c }
+      charts.push(c)
+    }
+  }
+
   return {
     ok: true,
     model: {
@@ -81,6 +101,7 @@ export function parse(text: string): ParseResult {
       meta,
       nodes,
       edges,
+      ...(charts.length > 0 ? { charts } : {}),
     },
   }
 }
@@ -116,5 +137,21 @@ function parseEdge(item: unknown, i: number): ProcessEdge | string {
     target: e.target,
     type,
     parameters: e.parameters as ProcessEdge["parameters"],
+  }
+}
+
+function parseChart(item: unknown, i: number): ChartWindow | string {
+  if (typeof item !== "object" || item === null) return `charts[${i}]: ожидается объект`
+  const c = item as Record<string, unknown>
+  if (typeof c.id !== "string") return `charts[${i}]: отсутствует строковый id`
+  if (typeof c.nodeId !== "string") return `charts[${i}] (${c.id}): отсутствует nodeId`
+  const pos = c.position as Record<string, unknown> | undefined
+  if (!pos || typeof pos.x !== "number" || typeof pos.y !== "number")
+    return `charts[${i}] (${c.id}): position {x,y} обязателен`
+  return {
+    id: c.id,
+    nodeId: c.nodeId,
+    position: { x: pos.x, y: pos.y },
+    colorIndex: typeof c.colorIndex === "number" ? c.colorIndex : 0,
   }
 }

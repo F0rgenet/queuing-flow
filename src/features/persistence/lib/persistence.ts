@@ -46,7 +46,12 @@ export function usePersistence() {
 
     let timer: ReturnType<typeof setTimeout> | null = null
     const unsub = useProcessStore.subscribe((state, prev) => {
-      if (state.nodes === prev.nodes && state.edges === prev.edges && state.meta === prev.meta)
+      if (
+        state.nodes === prev.nodes &&
+        state.edges === prev.edges &&
+        state.meta === prev.meta &&
+        state.charts === prev.charts
+      )
         return
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => saveModel(state.getModel()), SAVE_DEBOUNCE_MS)

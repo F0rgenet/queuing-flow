@@ -378,6 +378,22 @@ export class Simulator {
       }
     }
 
+    // Источники: число сгенерированных заявок (для отображения на графиках).
+    for (const node of this.model.nodes) {
+      if (node.type !== "source") continue
+      byNode[node.id] = {
+        nodeId: node.id,
+        queueLength: 0,
+        busyChannels: 0,
+        channels: 0,
+        utilization: 0,
+        avgQueue: 0,
+        maxQueue: 0,
+        processed: this.generatedBySource.get(node.id) ?? 0,
+        dropped: 0,
+      }
+    }
+
     return {
       byNode,
       stats: {

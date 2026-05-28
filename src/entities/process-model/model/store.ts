@@ -3,6 +3,7 @@ import { makeId } from "@/shared/lib/id"
 import { validateModel, type ValidationReport } from "../lib/validator"
 import { defaultParams, emptyModel, NODE_LABELS, SAMPLE_MODEL } from "./defaults"
 import type {
+  ChartWindow,
   NodeParameters,
   NodeType,
   Position,
@@ -25,6 +26,7 @@ interface ProcessState {
   meta: ProcessMeta
   nodes: ProcessNode[]
   edges: ProcessEdge[]
+  charts: ChartWindow[]
   selectedNodeId: string | null
   selectedEdgeId: string | null
   validation: ValidationReport
@@ -44,6 +46,12 @@ interface ProcessState {
   addEdge: (source: string, target: string) => string | null
   updateEdge: (id: string, patch: Partial<ProcessEdge>) => void
   removeEdge: (id: string) => void
+
+  // --- окна графиков ---
+  openChart: (nodeId: string, position: Position) => string
+  closeChart: (id: string) => void
+  moveChart: (id: string, position: Position) => void
+  toggleChart: (nodeId: string, fallbackPosition: Position) => void
 
   // --- выделение ---
   selectNode: (id: string | null) => void
@@ -91,6 +99,7 @@ export const useProcessStore = create<ProcessState>((set, get) => {
     meta: SAMPLE_MODEL.meta,
     nodes: SAMPLE_MODEL.nodes,
     edges: SAMPLE_MODEL.edges,
+    charts: [],
     selectedNodeId: null,
     selectedEdgeId: null,
     validation: validateModel(SAMPLE_MODEL),
@@ -99,7 +108,13 @@ export const useProcessStore = create<ProcessState>((set, get) => {
 
     getModel: () => {
       const s = get()
-      return { version: s.version, meta: s.meta, nodes: s.nodes, edges: s.edges }
+      return {
+        version: s.version,
+        meta: s.meta,
+        nodes: s.nodes,
+        edges: s.edges,
+        ...(s.charts.length > 0 ? { charts: s.charts } : {}),
+      }
     },
 
     addNode: (type, position) => {
@@ -142,12 +157,15 @@ export const useProcessStore = create<ProcessState>((set, get) => {
         meta: s.meta,
       })),
 
-    removeNode: (id) =>
+    removeNode: (id) => {
+      // Удалить окна графиков, связанные с удаляемым узлом.
+      set((s) => ({ charts: s.charts.filter((c) => c.nodeId !== id) }))
       commit((s) => ({
         nodes: s.nodes.filter((n) => n.id !== id),
         edges: s.edges.filter((e) => e.source !== id && e.target !== id),
         meta: s.meta,
-      })),
+      }))
+    },
 
     addEdge: (source, target) => {
       if (source === target) return null
@@ -173,26 +191,57 @@ export const useProcessStore = create<ProcessState>((set, get) => {
         meta: s.meta,
       })),
 
+    openChart: (nodeId, position) => {
+      const id = makeId("chart")
+      const colorIndex = nextColorIndex(get().charts)
+      set((s) => ({ charts: [...s.charts, { id, nodeId, position, colorIndex }] }))
+      return id
+    },
+
+    closeChart: (id) => set((s) => ({ charts: s.charts.filter((c) => c.id !== id) })),
+
+    moveChart: (id, position) =>
+      set((s) => ({
+        charts: s.charts.map((c) => (c.id === id ? { ...c, position } : c)),
+      })),
+
+    toggleChart: (nodeId, fallbackPosition) => {
+      const existing = get().charts.find((c) => c.nodeId === nodeId)
+      if (existing) set((s) => ({ charts: s.charts.filter((c) => c.id !== existing.id) }))
+      else {
+        const id = makeId("chart")
+        const colorIndex = nextColorIndex(get().charts)
+        set((s) => ({
+          charts: [...s.charts, { id, nodeId, position: fallbackPosition, colorIndex }],
+        }))
+      }
+    },
+
     selectNode: (id) => set({ selectedNodeId: id, selectedEdgeId: null }),
     selectEdge: (id) => set({ selectedEdgeId: id, selectedNodeId: null }),
 
     replaceModel: (model, recordHistory = true) => {
-      set((s) => ({
-        version: model.version,
-        meta: model.meta,
-        nodes: model.nodes,
-        edges: model.edges,
-        past: recordHistory ? [...s.past, snapshot(s)].slice(-HISTORY_LIMIT) : s.past,
-        future: recordHistory ? [] : s.future,
-        validation: validateModel(model),
-        // выделение очищаем, если выбранного узла больше нет
-        selectedNodeId: model.nodes.some((n) => n.id === s.selectedNodeId)
-          ? s.selectedNodeId
-          : null,
-        selectedEdgeId: model.edges.some((e) => e.id === s.selectedEdgeId)
-          ? s.selectedEdgeId
-          : null,
-      }))
+      set((s) => {
+        const nodeIds = new Set(model.nodes.map((n) => n.id))
+        const charts = (model.charts ?? []).filter((c) => nodeIds.has(c.nodeId))
+        return {
+          version: model.version,
+          meta: model.meta,
+          nodes: model.nodes,
+          edges: model.edges,
+          charts,
+          past: recordHistory ? [...s.past, snapshot(s)].slice(-HISTORY_LIMIT) : s.past,
+          future: recordHistory ? [] : s.future,
+          validation: validateModel(model),
+          // выделение очищаем, если выбранного узла больше нет
+          selectedNodeId: model.nodes.some((n) => n.id === s.selectedNodeId)
+            ? s.selectedNodeId
+            : null,
+          selectedEdgeId: model.edges.some((e) => e.id === s.selectedEdgeId)
+            ? s.selectedEdgeId
+            : null,
+        }
+      })
     },
 
     setMeta: (patch) =>
@@ -234,6 +283,14 @@ export const useProcessStore = create<ProcessState>((set, get) => {
     canRedo: () => get().future.length > 0,
   }
 })
+
+/** Берёт минимальный неиспользуемый colorIndex — стабильный цвет окна. */
+function nextColorIndex(charts: ChartWindow[]): number {
+  const used = new Set(charts.map((c) => c.colorIndex))
+  let i = 0
+  while (used.has(i)) i++
+  return i
+}
 
 /** Согласование типа связи и её параметров. */
 function normalizeEdge(edge: ProcessEdge): ProcessEdge {

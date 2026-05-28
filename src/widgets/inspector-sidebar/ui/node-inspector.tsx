@@ -1,3 +1,4 @@
+import { LineChart } from "lucide-react"
 import {
   isOperation,
   isSource,
@@ -23,7 +24,15 @@ export function NodeInspector({ node }: { node: ProcessNode }) {
   const updateLabel = useProcessStore((s) => s.updateNodeLabel)
   const updateParams = useProcessStore((s) => s.updateNodeParams)
   const removeNode = useProcessStore((s) => s.removeNode)
+  const toggleChart = useProcessStore((s) => s.toggleChart)
+  const chartOpen = useProcessStore((s) => s.charts.some((c) => c.nodeId === node.id))
   const analytics = useAnalyticsStore((s) => s.result.byNode[node.id])
+
+  const onToggleChart = () => {
+    // Стартовая позиция окна — над узлом (в flow-координатах превращается
+    // в screen-координаты на стороне оверлея, см. ChartWindowsOverlay).
+    toggleChart(node.id, { x: node.position.x, y: node.position.y - 220 })
+  }
 
   return (
     <div className="space-y-4">
@@ -152,6 +161,16 @@ export function NodeInspector({ node }: { node: ProcessNode }) {
           )}
         </div>
       )}
+
+      <Button
+        variant="outline"
+        size="sm"
+        className="w-full"
+        onClick={onToggleChart}
+        aria-pressed={chartOpen}
+      >
+        <LineChart /> {chartOpen ? "Скрыть график" : "График"}
+      </Button>
 
       <Button variant="destructive" size="sm" className="w-full" onClick={() => removeNode(node.id)}>
         Удалить блок

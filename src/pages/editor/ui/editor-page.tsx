@@ -1,4 +1,5 @@
 import { useAnalyticsSync } from "@/features/analytics"
+import { useChartsCollect } from "@/features/charts"
 import { usePersistence } from "@/features/persistence"
 import { useHotkeys } from "@/features/hotkeys"
 import { Toolbar } from "@/widgets/toolbar"
@@ -14,6 +15,7 @@ export function EditorPage() {
   useAnalyticsSync()
   usePersistence()
   useHotkeys()
+  useChartsCollect()
 
   return (
     <div className="flex h-svh flex-col overflow-hidden bg-background text-foreground">
