@@ -44,15 +44,57 @@ powershell -c "irm bun.sh/install.ps1 | iex"
 ```
 
 Альтернативы:
-
 - через `npm` (любая платформа): `npm install -g bun`
 - через `scoop` (Windows): `scoop install bun`
 - через `brew` (macOS): `brew install oven-sh/bun/bun`
 
-> Минимально поддерживаемая версия Bun — **1.1+**. На Windows рекомендуется
-> Windows 10/11 либо WSL2.
+### 2. Установка Git
 
-### 2. Клонирование и установка зависимостей
+**Linux (Debian/Ubuntu):**
+
+```bash
+sudo apt update && sudo apt install git
+```
+
+**Linux (Fedora):**
+
+```bash
+sudo dnf install git
+```
+
+**Linux (Arch):**
+
+```bash
+sudo pacman -S git
+```
+
+**macOS:**
+
+```bash
+brew install git
+```
+
+Либо установите [Xcode Command Line Tools](https://developer.apple.com/xcode/):
+`xcode-select --install`.
+
+**Windows (PowerShell):**
+
+```powershell
+winget install --id Git.Git -e
+```
+
+Альтернативы:
+- скачать установщик с [git-scm.com](https://git-scm.com/download/win)
+- через `scoop`: `scoop install git`
+- через `choco`: `choco install git`
+
+Проверка установки:
+
+```bash
+git --version
+```
+
+### 3. Клонирование и установка зависимостей
 
 ```bash
 git clone https://github.com/F0rgenet/queuing-flow.git queuing-flow
@@ -60,7 +102,7 @@ cd queuing-flow
 bun install
 ```
 
-### 3. Запуск дев-сервера (для разработки)
+### 4. Запуск дев-сервера (для разработки)
 
 ```bash
 bun run dev
@@ -68,7 +110,7 @@ bun run dev
 
 Откройте [http://localhost:5173](http://localhost:5173)
 
-### 4. Прод-сборка и предпросмотр
+### 5. Прод-сборка и предпросмотр
 
 ```bash
 bun run build      # собирает приложение
