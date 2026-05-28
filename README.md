@@ -5,6 +5,8 @@
 
 Полное ТЗ: [docs/specification.md](docs/specification.md).
 
+![Screenshot](assets/screenshots/overview-dark.png)
+
 ## Возможности
 
 - **Холст (React Flow):** drag-and-drop узлов (источник / операция / сток), связи,
@@ -18,19 +20,73 @@
 - Цветовая индикация загрузки, трёхуровневое раскрытие данных узла (блок → tooltip →
   боковая панель), undo/redo, автосохранение в localStorage, импорт/экспорт `.json`.
 
+## Быстрый старт
+
+### 1. Установка Bun
+
+**Linux / macOS / WSL:**
+
+```bash
+curl -fsSL https://bun.sh/install | bash
+```
+
+После установки перезапустите терминал (или выполните `source ~/.bashrc` /
+`source ~/.zshrc`), затем проверьте:
+
+```bash
+bun --version
+```
+
+**Windows (PowerShell):**
+
+```powershell
+powershell -c "irm bun.sh/install.ps1 | iex"
+```
+
+Альтернативы:
+
+- через `npm` (любая платформа): `npm install -g bun`
+- через `scoop` (Windows): `scoop install bun`
+- через `brew` (macOS): `brew install oven-sh/bun/bun`
+
+> Минимально поддерживаемая версия Bun — **1.1+**. На Windows рекомендуется
+> Windows 10/11 либо WSL2.
+
+### 2. Клонирование и установка зависимостей
+
+```bash
+git clone https://github.com/F0rgenet/queuing-flow.git queuing-flow
+cd queuing-flow
+bun install
+```
+
+### 3. Запуск дев-сервера (для разработки)
+
+```bash
+bun run dev
+```
+
+Откройте [http://localhost:5173](http://localhost:5173)
+
+### 4. Прод-сборка и предпросмотр
+
+```bash
+bun run build      # собирает приложение
+bun run preview    # поднимает локальный сервер для предпросмотра
+```
+
+После `bun run preview` откройте [http://localhost:4173](http://localhost:4173).
+
 ## Команды
 
 ```bash
-bun install      # зависимости
-bun run dev      # дев-сервер (http://localhost:5173)
-bun run build    # прод-сборка (tsc -b + vite build)
-bun run typecheck
-bun test         # юнит-тесты движков (аналитика + симуляция)
-bun run lint
+bun run dev         # дев-сервер (http://localhost:5173)
+bun run build       # прод-сборка (tsc -b + vite build)
+bun run preview     # локальный просмотр прод-сборки
+bun run typecheck   # проверка типов TypeScript
+bun run lint        # ESLint
+bun run format      # Prettier
 ```
-
-> JSON-редактор подгружает Monaco c CDN при первом открытии — для офлайн-режима
-> требуется настройка `loader` из `@monaco-editor/react`.
 
 ## Архитектура — Feature-Sliced Design
 
@@ -63,13 +119,3 @@ src/
     ├── lib/                  #   math (Гаусс), id, format, cn, theme
     └── ui/                   #   button, поля форм
 ```
-
-### Проектные решения
-
-- **`analytics` и `simulation` — это `features`, а не `entities`.** Они не самостоятельные
-  сущности, а *операции над* `process-model`. Это сохраняет единственную доменную сущность
-  и не нарушает правило FSD «entities не импортируют друг друга».
-- **Граф — единственный источник истины.** Холст и JSON суть его представления;
-  синхронизация диффами через стор исключает рассинхрон.
-- **Доменные движки — чистые функции** (`computeAnalytics`, `Simulator`), покрыты
-  юнит-тестами против эталонных формул M/M/1 и M/M/c.
